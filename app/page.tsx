@@ -1,69 +1,109 @@
-import Image from "next/image";
+import { Clock, Package } from "lucide-react";
+import { ActiveJobs } from "@/components/ActiveJobs";
+import { ActivityList } from "@/components/ActivityList";
+import { EmptyState } from "@/components/EmptyState";
+import { HomeFilter } from "@/components/HomeFilter";
+import { ItemCard } from "@/components/ItemCard";
+import { LowStockBanner } from "@/components/LowStockBanner";
+import { ScanLookupButton } from "@/components/ScanLookupButton";
+import { isLowStock } from "@/lib/labels";
+import { prisma } from "@/lib/prisma";
+import { hasActiveFilters, parseItemFilters, itemWhere } from "@/lib/utils";
 
-export default function Home() {
+export const metadata = { title: "Home" };
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const filters = parseItemFilters(sp);
+
+  const [rawItems, categories, projects, activity, totalAll, activeJobs, allStock] =
+    await Promise.all([
+      prisma.item.findMany({
+        where: itemWhere(filters),
+        orderBy: { name: "asc" },
+      }),
+      prisma.category.findMany({ orderBy: { name: "asc" } }),
+      prisma.project.findMany({ orderBy: { name: "asc" } }),
+      prisma.activityLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      }),
+      prisma.item.count(),
+      prisma.project.findMany({
+        where: { status: "Active" },
+        orderBy: { name: "asc" },
+      }),
+      prisma.item.findMany({
+        select: { quantity: true, reorderPoint: true },
+      }),
+    ]);
+
+  const items =
+    filters.low === "1"
+      ? rawItems.filter((item) => isLowStock(item.quantity, item.reorderPoint))
+      : rawItems;
+
+  const filtered = hasActiveFilters(filters);
+  const lowStockCount = allStock.filter((item) =>
+    isLowStock(item.quantity, item.reorderPoint),
+  ).length;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="space-y-4">
+      {filters.low !== "1" ? <LowStockBanner count={lowStockCount} /> : null}
+
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-navy">Items</h1>
+          <p className="mt-1 text-sm text-mute">
+            {items.length} {items.length === 1 ? "item" : "items"}
+            {filters.low === "1" ? " · Low stock" : filtered ? " match" : ""}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <HomeFilter
+            filters={filters}
+            categories={categories}
+            projects={projects}
+            lowStockCount={lowStockCount}
+          />
+          <ScanLookupButton />
         </div>
-      </main>
+      </div>
+
+      <ActiveJobs jobs={activeJobs} activeId={filters.project} />
+
+      {items.length === 0 ? (
+        <EmptyState
+          icon={Package}
+          title={totalAll === 0 ? "No items yet" : "No matches"}
+          description={
+            totalAll === 0
+              ? "Add gear from the shop, van, or a job so the team can find it fast."
+              : "Try a different search or clear the filters."
+          }
+          actionHref={totalAll === 0 ? "/items/new" : "/"}
+          actionLabel={totalAll === 0 ? "Add first item" : "Clear filters"}
+        />
+      ) : (
+        <div className="grid gap-3">
+          {items.map((item) => (
+            <ItemCard key={item.id} item={item} />
+          ))}
+        </div>
+      )}
+
+      <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-5">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-navy">Recent activity</h2>
+          <Clock className="h-4 w-4 text-mute" />
+        </div>
+        <ActivityList compact entries={activity} />
+      </section>
     </div>
   );
 }

@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  Active
+  Completed
+}
+
+enum Location {
+  Shop
+  Van
+  Shipping
+  Jobsite
+  Other
+}
+
+enum ItemStatus {
+  InStock
+  OutOfStock
+  InTransit
+  AtLocation
+}
+
+enum Condition {
+  New
+  Used
+  ShopRefurbished
+}
+
+enum ActivityAction {
+  Created
+  Updated
+  QuantityChanged
+  LocationChanged
+  Deleted
+  LowStock
+}
+
+enum Role {
+  Admin
+  Tech
+}
+
+model Category {
+  id    String @id @default(cuid())
+  name  String @unique
+  items Item[]
+}
+
+model ItemName {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     Item[]
+}
+
+model Manufacturer {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     Item[]
+}
+
+model Project {
+  id        String        @id @default(cuid())
+  name      String
+  client    String?
+  status    ProjectStatus @default(Active)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  items     Item[]
+}
+
+model Item {
+  id             String         @id @default(cuid())
+  name           String
+  manufacturer   String?
+  serialNumber   String?
+  quantity       Int            @default(1)
+  reorderPoint   Int            @default(0)
+  location       Location       @default(Shop)
+  status         ItemStatus     @default(InStock)
+  condition      Condition      @default(New)
+  price          Float?
+  photoUrl       String?
+  notes          String?
+  itemNameId     String
+  itemName       ItemName       @relation(fields: [itemNameId], references: [id], onDelete: Restrict)
+  manufacturerId String?
+  maker          Manufacturer?  @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  categoryId     String?
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  activityLogs   ActivityLog[]
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  action    ActivityAction
+  details   String
+  itemId    String?
+  item      Item?          @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  createdAt DateTime       @default(now())
+}
+
+model User {
+  id              String            @id @default(cuid())
+  name            String
+  email           String            @unique
+  emailVerified   DateTime?
+  image           String?
+  passwordHash    String?
+  role            Role              @default(Tech)
+  disabled        Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  accounts        Account[]
+  sessions        Session[]
+  oneTimeCodes    OneTimeCode[]
+  rememberDevices RememberDevice[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model OneTimeCode {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, purpose])
+}
+
+model RememberDevice {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ReportSettings {
+  id         String    @id @default("default")
+  frequency  String    @default("Off")
+  extraEmail String?
+  lastSentAt DateTime?
+  updatedAt  DateTime  @updatedAt
+}

@@ -1,5 +1,4 @@
 import { ItemForm } from "@/components/ItemForm";
-import { aiEnabled } from "@/lib/ai-suggest";
 import { firstParam } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 
@@ -36,7 +35,6 @@ export default async function NewItemPage({
           categories={categories}
           projects={projects}
           initialSerial={firstParam(sp.serial)}
-          aiEnabled={aiEnabled()}
         />
       </div>
     </div>

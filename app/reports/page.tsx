@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AiStatusLine } from "@/components/AiStatusLine";
 import { ReportsForm } from "@/components/ReportsForm";
 import { getCurrentUser } from "@/lib/guards";
 import { isMailConfigured } from "@/lib/mail";
@@ -22,6 +23,7 @@ export default async function ReportsPage() {
           Email a short stock summary. Timezone {REPORT_TZ}. Weekly goes out
           Monday morning.
         </p>
+        <AiStatusLine />
       </div>
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-6">
         <ReportsForm

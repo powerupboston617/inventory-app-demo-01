@@ -84,13 +84,16 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" http://localhost:3000/api/cron/
 
 The endpoint only sends when a report is due. It does not send on page load.
 
-Optional AI (`XAI_API_KEY` — restart the app after setting it):
+Optional AI (`XAI_API_KEY` — **restart** `npm run dev` or the host process after setting it):
 
 ```
 XAI_API_KEY=
+# GROK_API_KEY=   # used only if XAI_API_KEY is unset
 ```
 
-If `XAI_API_KEY` is missing, **Fill from photo** and **Suggest category** are hidden. Fill from photo uses a vision model (default `grok-4.6`; override with `XAI_VISION_MODEL`).
+If the key is missing, **Fill from photo** and **Suggest category** stay hidden. After you add the key, restart the server. Add Item and Edit Item ask the server whether AI is on (`GET /api/ai-status`); they never read the key in the browser. Do not set `NEXT_PUBLIC_XAI_API_KEY`.
+
+Fill from photo uses a vision/chat model (`grok-4.6`, then `grok-4.3` if needed). Do not use `grok-imagine-image-*`. Override with `XAI_VISION_MODEL` only for another chat/vision model.
 
 ## Routes
 
@@ -125,8 +128,8 @@ Home and Items are similar lists. Home is the list plus Filter popup, active job
 - **CSV import** — Admin only. Download a template, upload up to 500 rows. Invalid rows are skipped; the rest still import. Creates new items only. Name/manufacturer/category match existing list rows or create them.
 - **Reports** — Admin: Off / Daily / Weekly (Monday). Test send button. All Admin emails plus an optional extra recipient.
 - **Barcode scan** — Scan on Home, Items, Add, and Edit. Fills serial or opens the matching item. Camera needs HTTPS or localhost.
-- **Fill from photo** — On Add/Edit Item after a photo is chosen, when `XAI_API_KEY` is set. Fills name (and manufacturer/category when obvious). Review, then Save. Restart after adding the key.
-- **Suggest category** — On Add Item when `XAI_API_KEY` is set.
+- **Fill from photo** — On Add/Edit Item after a photo is chosen, when AI is on. Fills name (and manufacturer/category when obvious). Review, then Save. Restart after adding `XAI_API_KEY`.
+- **Suggest category** — On Add/Edit Item when AI is on. Sets Category from name + manufacturer + notes. Restart after adding the key.
 
 ## Data notes
 

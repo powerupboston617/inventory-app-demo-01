@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Camera, Plus, ScanLine, Sparkles } from "lucide-react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { fillFromPhoto, suggestCategory } from "@/lib/actions-ai";
@@ -48,7 +48,6 @@ export function ItemForm({
   categories,
   projects,
   initialSerial,
-  aiEnabled = false,
 }: {
   item?: ItemFormValues;
   itemNames: ItemFormCategory[];
@@ -56,7 +55,6 @@ export function ItemForm({
   categories: ItemFormCategory[];
   projects: ItemFormProject[];
   initialSerial?: string;
-  aiEnabled?: boolean;
 }) {
   const [names, setNames] = useState(itemNames);
   const [makers, setMakers] = useState(manufacturers);
@@ -82,6 +80,7 @@ export function ItemForm({
     item?.serialNumber ?? initialSerial ?? "",
   );
   const [scanOpen, setScanOpen] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoHint, setPhotoHint] = useState<string | null>(null);
@@ -91,6 +90,21 @@ export function ItemForm({
   const [makerPending, setMakerPending] = useState(false);
   const [catPending, setCatPending] = useState(false);
   const [projPending, setProjPending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/ai-status", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((data: { enabled?: unknown }) => {
+        if (!cancelled) setAiEnabled(data.enabled === true);
+      })
+      .catch(() => {
+        if (!cancelled) setAiEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(formData: FormData) {
     setError(null);
@@ -203,7 +217,14 @@ export function ItemForm({
     if (photoFile) formData.set("photo", photoFile);
     if (item?.photoUrl) formData.set("photoUrl", item.photoUrl);
     setReadingPhoto(true);
-    const result = await fillFromPhoto(formData);
+    let result: Awaited<ReturnType<typeof fillFromPhoto>>;
+    try {
+      result = await fillFromPhoto(formData);
+    } catch {
+      setReadingPhoto(false);
+      setError("Couldn’t read this photo. Enter the name manually.");
+      return;
+    }
     setReadingPhoto(false);
     if (result.error || !result.suggestion) {
       setError("Couldn’t read this photo. Enter the name manually.");
@@ -243,7 +264,41 @@ export function ItemForm({
     );
   }
 
+  async function applySuggestCategory() {
+    setError(null);
+    const selectedName = names.find((row) => row.id === itemNameId)?.name ?? "";
+    const selectedMaker =
+      makers.find((row) => row.id === manufacturerId)?.name ?? "";
+    setSuggesting(true);
+    let result: Awaited<ReturnType<typeof suggestCategory>>;
+    try {
+      result = await suggestCategory({
+        name: selectedName,
+        manufacturer: selectedMaker,
+        notes,
+      });
+    } catch {
+      setSuggesting(false);
+      setError("Couldn’t suggest a category.");
+      return;
+    }
+    setSuggesting(false);
+    if (result.error === "Enter a name first.") {
+      setError(result.error);
+      return;
+    }
+    if (!result.name) {
+      setError("Couldn’t suggest a category.");
+      return;
+    }
+    const existing = cats.find(
+      (cat) => cat.name.toLowerCase() === result.name!.toLowerCase(),
+    );
+    if (existing) setCategoryId(existing.id);
+  }
+
   const hasPhoto = Boolean(photoPreview);
+  const aiBusy = readingPhoto || suggesting;
 
   return (
     <form action={onSubmit} className="space-y-5">
@@ -278,15 +333,26 @@ export function ItemForm({
             }}
           />
         </label>
-        {aiEnabled && hasPhoto ? (
-          <button
-            type="button"
-            disabled={readingPhoto}
-            onClick={applyPhotoFill}
-            className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-orange px-4 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
-          >
-            {readingPhoto ? "Reading photo…" : "Fill from photo"}
-          </button>
+        {aiEnabled ? (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              disabled={aiBusy || !hasPhoto}
+              onClick={applyPhotoFill}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-orange px-4 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+            >
+              {readingPhoto ? "Reading photo…" : "Fill from photo"}
+            </button>
+            <button
+              type="button"
+              disabled={aiBusy}
+              onClick={applySuggestCategory}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl bg-orange px-4 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+            >
+              <Sparkles className="h-4 w-4" />
+              {suggesting ? "Suggesting…" : "Suggest category"}
+            </button>
+          </div>
         ) : null}
         {photoHint ? (
           <p className="mt-2 text-sm text-navy">{photoHint}</p>
@@ -528,72 +594,14 @@ export function ItemForm({
           <label htmlFor="categoryId" className="text-sm font-medium text-navy">
             Category
           </label>
-          <div className="flex items-center gap-3">
-            {aiEnabled && !item ? (
-              <button
-                type="button"
-                disabled={suggesting}
-                onClick={async () => {
-                  const nameSelect = document.getElementById(
-                    "itemNameId",
-                  ) as HTMLSelectElement | null;
-                  const makerSelect = document.getElementById(
-                    "manufacturerId",
-                  ) as HTMLSelectElement | null;
-                  const notes = document.getElementById("notes") as HTMLTextAreaElement | null;
-                  const selectedName =
-                    nameSelect?.selectedOptions[0]?.text &&
-                    nameSelect.value
-                      ? nameSelect.selectedOptions[0].text
-                      : "";
-                  const selectedMaker =
-                    makerSelect?.value && makerSelect.selectedOptions[0]
-                      ? makerSelect.selectedOptions[0].text
-                      : "";
-                  setSuggesting(true);
-                  const result = await suggestCategory({
-                    name: selectedName,
-                    manufacturer: selectedMaker,
-                    notes: notes?.value,
-                  });
-                  setSuggesting(false);
-                  if (result.error === "Enter a name first.") {
-                    setError(result.error);
-                    return;
-                  }
-                  if (!result.name) return;
-                  const existing = cats.find(
-                    (cat) => cat.name.toLowerCase() === result.name!.toLowerCase(),
-                  );
-                  if (existing) {
-                    setCategoryId(existing.id);
-                    return;
-                  }
-                  const created = await createCategory(result.name);
-                  if (created.ok) {
-                    setCats((prev) =>
-                      [...prev, { id: created.id, name: created.name }].sort((a, b) =>
-                        a.name.localeCompare(b.name),
-                      ),
-                    );
-                    setCategoryId(created.id);
-                  }
-                }}
-                className="inline-flex items-center gap-1 text-sm font-medium text-blue disabled:opacity-60"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {suggesting ? "Suggesting…" : "Suggest category"}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowNewCat((v) => !v)}
-              className="inline-flex items-center gap-1 text-sm font-medium text-blue"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New category
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowNewCat((v) => !v)}
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New category
+          </button>
         </div>
         <select
           id="categoryId"

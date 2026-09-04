@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ItemForm } from "@/components/ItemForm";
-import { aiEnabled } from "@/lib/ai-suggest";
 import { prisma } from "@/lib/prisma";
 
 export const metadata = { title: "Edit item" };
@@ -43,7 +42,6 @@ export default async function EditItemPage({
           manufacturers={manufacturers}
           categories={categories}
           projects={projects}
-          aiEnabled={aiEnabled()}
         />
       </div>
     </div>
